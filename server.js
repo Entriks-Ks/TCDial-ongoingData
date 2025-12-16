@@ -23,15 +23,23 @@ app.get("/", (req, res) => {
   res.send("✅ TC-DIAL webhook server running");
 });
 
-// ---------------- WEBHOOK ----------------
 app.post("/webhook/agent-set-disposition", async (req, res) => {
   try {
+    console.log("📩 Incoming webhook:", JSON.stringify(req.body, null, 2));
+
     const d = req.body;
+
+    // ✅ Allow test calls & avoid crashing
+    if (!d.leadId || !d.callStatusId) {
+      return res.status(200).json({
+        success: true,
+        message: "Webhook received, no DB insert (missing required fields)"
+      });
+    }
 
     await db.execute(
       `
       INSERT INTO dispositions (
-        id,
         lead_id,
         campaign_id,
         user_id,
@@ -40,20 +48,19 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
         callDirection,
         hangupSide
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         call_status_id = VALUES(call_status_id),
         callTime = VALUES(callTime)
       `,
       [
-        d.id,
-        d.leadId ?? null,
+        d.leadId,
         d.campaignId ?? null,
         d.userId ?? null,
-        d.callStatusId ?? null,
+        d.callStatusId,
         d.callTime ?? null,
         d.callDirection ?? null,
-        d.hangupSide ?? null,
+        d.hangupSide ?? null
       ]
     );
 
@@ -64,8 +71,11 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
   }
 });
 
+
 // ---------------- START ----------------
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Webhook listening on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+console.log(`🚀 Webhook listening on port ${PORT}`);
 });
+
+
