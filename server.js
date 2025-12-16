@@ -37,9 +37,10 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
       });
     }
 
-    await db.execute(
+     await db.execute(
       `
       INSERT INTO dispositions (
+        id,
         lead_id,
         campaign_id,
         user_id,
@@ -48,7 +49,7 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
         callDirection,
         hangupSide
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         call_status_id = VALUES(call_status_id),
         callTime = VALUES(callTime)
