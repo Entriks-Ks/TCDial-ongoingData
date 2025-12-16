@@ -37,7 +37,7 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
       });
     }
 
-     await db.execute(
+    await db.execute(
       `
       INSERT INTO dispositions (
         id,
@@ -51,10 +51,16 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
-        call_status_id = VALUES(call_status_id),
-        callTime = VALUES(callTime)
-      `,
+      lead_id = VALUES(lead_id),
+      campaign_id = VALUES(campaign_id),
+      user_id = VALUES(user_id),
+      call_status_id = VALUES(call_status_id),
+      callTime = VALUES(callTime),
+      callDirection = VALUES(callDirection),
+      hangupSide = VALUES(hangupSide)
+     `,
       [
+        d.id,
         d.leadId,
         d.campaignId ?? null,
         d.userId ?? null,
@@ -78,5 +84,4 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
 console.log(`🚀 Webhook listening on port ${PORT}`);
 });
-
 
