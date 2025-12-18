@@ -24,20 +24,64 @@ app.get("/", (req, res) => {
 });
 
 app.post("/webhook/agent-set-disposition", async (req, res) => {
+  const connection = await db.getConnection();
+
   try {
     console.log("📩 Incoming webhook:", JSON.stringify(req.body, null, 2));
-
     const d = req.body;
 
-    // ✅ Allow test calls & avoid crashing
+    // Minimal validation
     if (!d.leadId || !d.callStatusId) {
       return res.status(200).json({
         success: true,
-        message: "Webhook received, no DB insert (missing required fields)"
+        message: "Webhook received, missing required fields"
       });
     }
 
-    await db.execute(
+    await connection.beginTransaction();
+
+    // ---------------- 1️⃣ ENSURE LEAD EXISTS ----------------
+    await connection.execute(
+      `
+      INSERT IGNORE INTO leads (id, listId)
+      VALUES (?, ?)
+      `,
+      [d.leadId, null]
+    );
+
+    // ---------------- 2️⃣ ENSURE CAMPAIGN EXISTS ----------------
+    if (d.campaignId) {
+      await connection.execute(
+        `
+        INSERT IGNORE INTO campaigns (id, name, isActive)
+        VALUES (?, 'Unknown campaign', 1)
+        `,
+        [d.campaignId]
+      );
+    }
+
+    // ---------------- 3️⃣ ENSURE USER EXISTS ----------------
+    if (d.agentId) {
+      await connection.execute(
+        `
+        INSERT IGNORE INTO users (id, firstName, lastName)
+        VALUES (?, 'Unknown', 'Agent')
+        `,
+        [d.agentId]
+      );
+    }
+
+    // ---------------- 4️⃣ ENSURE CALL STATUS EXISTS ----------------
+    await connection.execute(
+      `
+      INSERT IGNORE INTO callStatus (id, name, \`group\`)
+      VALUES (?, 'Unknown', 'Unknown')
+      `,
+      [d.callStatusId]
+    );
+
+    // ---------------- 5️⃣ INSERT DISPOSITION ----------------
+    await connection.execute(
       `
       INSERT INTO dispositions (
         id,
@@ -51,37 +95,37 @@ app.post("/webhook/agent-set-disposition", async (req, res) => {
       )
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
-      lead_id = VALUES(lead_id),
-      campaign_id = VALUES(campaign_id),
-      user_id = VALUES(user_id),
-      call_status_id = VALUES(call_status_id),
-      callTime = VALUES(callTime),
-      callDirection = VALUES(callDirection),
-      hangupSide = VALUES(hangupSide)
-     `,
+        call_status_id = VALUES(call_status_id),
+        callTime = VALUES(callTime),
+        callDirection = VALUES(callDirection),
+        hangupSide = VALUES(hangupSide)
+      `,
       [
         d.id,
         d.leadId,
         d.campaignId ?? null,
-        d.userId ?? null,
+        d.agentId ?? null,
         d.callStatusId,
-        d.callTime ?? null,
+        d.callTime ?? 0,
         d.callDirection ?? null,
         d.hangupSide ?? null
       ]
     );
 
+    await connection.commit();
     res.status(200).json({ success: true });
+
   } catch (err) {
+    await connection.rollback();
     console.error("❌ Webhook error:", err);
     res.status(500).json({ error: "Internal error" });
+  } finally {
+    connection.release();
   }
 });
-
 
 // ---------------- START ----------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
-console.log(`🚀 Webhook listening on port ${PORT}`);
+  console.log(`🚀 Webhook listening on port ${PORT}`);
 });
-
